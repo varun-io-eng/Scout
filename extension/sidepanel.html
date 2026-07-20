@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scout</title>
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body class="scout-panel" data-mode="sidepanel">
+  <div id="resizeHandle" class="resize-handle hidden" title="Drag to resize"></div>
+
+  <div class="panel-inner">
+    <header class="panel-header">
+      <div class="header-row">
+        <div>
+          <div class="logo">🔭 Scout</div>
+          <p class="tagline" id="panelTagline">Research copilot</p>
+        </div>
+        <button id="widenBtn" class="btn-icon" title="Open wide panel on page">↔</button>
+      </div>
+      <button id="headerRunAutomation" class="btn primary header-run-btn hidden" type="button">
+        Run automation
+      </button>
+      <button id="headerStopAutomation" class="btn danger header-run-btn hidden" type="button" style="display:none;">
+        Stop
+      </button>
+      <p id="headerRunStatus" class="header-run-status muted hidden"></p>
+    </header>
+
+    <div class="panel-scroll">
+      <section id="operatorSection" class="operator-section hidden">
+        <h2>Lead operator</h2>
+        <p id="operatorCampaign" class="muted operator-meta"></p>
+        <div id="operatorQueue" class="operator-queue"></div>
+        <button id="operatorRunBtn" class="btn primary operator-run">Automate LinkedIn → Ready</button>
+        <button id="operatorStopBtn" class="btn danger operator-run" style="display:none;margin-top:8px;">Stop automation</button>
+        <p id="operatorStatus" class="operator-status muted"></p>
+      </section>
+      <section id="profileCard" class="profile-card">
+        <p class="loading">Reading page…</p>
+      </section>
+
+      <section id="summarySection" class="summary-section hidden">
+        <p id="summaryText" class="summary-text"></p>
+        <div id="chipRow" class="chip-row"></div>
+        <ul id="highlights" class="highlights"></ul>
+      </section>
+
+      <section class="section">
+        <h2>Quick asks</h2>
+        <div id="quickPrompts" class="quick-prompts"></div>
+        <div class="ask-box">
+          <textarea id="question" rows="2" placeholder="Ask anything about this page…"></textarea>
+          <button id="askBtn" class="btn primary" disabled>Ask Scout</button>
+        </div>
+      </section>
+
+      <section id="answerSection" class="answer-section hidden">
+        <div class="answer-header">
+          <h2>Answer</h2>
+          <button id="copyBtn" class="btn-copy">Copy brief</button>
+        </div>
+        <div id="answerText" class="answer-full"></div>
+      </section>
+
+      <section class="section sources-section">
+        <details id="sourcesDetails">
+          <summary>Scraped sources (<span id="sourceCount">0</span>)</summary>
+          <div id="scrapedContent" class="scraped-list"></div>
+        </details>
+      </section>
+    </div>
+
+    <footer class="panel-footer">
+      <button id="saveBtn" class="btn secondary">Save to knowledge base</button>
+      <a href="http://localhost:5173" target="_blank">Dashboard →</a>
+    </footer>
+  </div>
+
+  <script src="panel-app.js"></script>
+</body>
+</html>

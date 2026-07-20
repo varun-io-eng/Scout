@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scout</title>
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body class="popup">
+  <header>
+    <div class="logo">🔭 Scout</div>
+    <p class="tagline">Research copilot</p>
+  </header>
+
+  <main>
+    <div id="status" class="status idle">Ready to scout this page</div>
+
+    <button id="scoutBtn" class="btn primary">
+      Scout this page
+    </button>
+
+    <button id="panelBtn" class="btn secondary">
+      Open wide panel
+    </button>
+
+    <div id="result" class="result hidden"></div>
+  </main>
+
+  <footer>
+    <a href="http://localhost:5173" target="_blank">Open dashboard →</a>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

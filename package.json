@@ -1,0 +1,21 @@
+{
+  "name": "scout",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-powered browser copilot for investors and recruiters",
+  "workspaces": [
+    "server",
+    "dashboard"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,dash -c blue,magenta \"npm run dev -w server\" \"npx wait-on http://127.0.0.1:3847/api/health && npm run dev -w dashboard\"",
+    "dev:server": "npm run dev -w server",
+    "dev:dashboard": "npm run dev -w dashboard",
+    "build": "npm run build -w server && npm run build -w dashboard",
+    "start": "npm run start -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "wait-on": "^8.0.5"
+  }
+}

@@ -92,18 +92,102 @@ Scout does **not** implement its own login. It reuses the **CRM operator session
 
 ## Architecture
 
-```
-scout/
-├── extension/     Chrome MV3 — Aura operator UI + LinkedIn assist
-├── server/        Node.js brain — ICP scoring, enrichment, decision log
-├── dashboard/     React app — research / ask-page copilot
-└── examples/      CRM integration guides + scripts
+Scout runs **beside** your CRM — no fork, no CRM code changes. The extension reuses the operator’s CRM session; the local API orchestrates enrichment, scoring, and writes results back.
+
+### System overview
+
+```mermaid
+flowchart TB
+  subgraph Browser["Operator browser (Chrome)"]
+    CRM["CRM UI\n(Aura / Datahub)"]
+    EXT["Scout extension\noperator panel · LinkedIn assist"]
+    WEB["LinkedIn / company pages"]
+    CRM <-->|"session token"| EXT
+    EXT <-->|"scrape / verify"| WEB
+  end
+
+  subgraph ScoutLocal["Scout — localhost"]
+    API["Express REST API\n:3847"]
+    BRAIN["Lead brain\nenrichment · ICP scoring · field diff"]
+    AUDIT["decisions.jsonl\nReady · Queued · delete audit"]
+    DASH["React dashboard\n:5173 — Research Copilot"]
+    API --> BRAIN
+    BRAIN --> AUDIT
+    DASH --> API
+  end
+
+  subgraph External["External services"]
+    DH["CRM backend\n(Datahub API)"]
+    APOLLO["Apollo.io\norganization APIs"]
+    LLM["Groq / OpenAI\nICP scoring · Q&A"]
+  end
+
+  EXT -->|"POST /api/leads/*"| API
+  BRAIN -->|"Bearer token — same as CRM UI"| DH
+  BRAIN -->|"company enrich"| APOLLO
+  BRAIN -->|"fit score · briefs"| LLM
 ```
 
+### Lead operator flow
+
+Each **Not Eligible** lead moves through enrichment → scoring → a logged decision:
+
+```mermaid
+flowchart TD
+  START([Not Eligible lead in campaign]) --> ENRICH{Company data\nstale or missing?}
+
+  ENRICH -->|Yes| APOLLO[Apollo org search + enrich\nfill only changed fields]
+  ENRICH -->|No| SCORE
+  APOLLO --> SCORE[LLM + rule-based ICP scoring\nvs campaign ICP]
+
+  SCORE --> GATE{fitScore ≥ 8?}
+
+  GATE -->|Yes| AUTO[Auto-edit CRM fields\noverride invalid ICP flags]
+  AUTO --> READY[Stage: Ready]
+  READY --> QUEUED[Stage: Queued]
+
+  GATE -->|No| MANUAL{Operator confirms\nrole on LinkedIn?}
+  MANUAL -->|Yes| AUTO
+  MANUAL -->|No| DELETE[Hard delete from campaign]
+
+  READY --> LOG[(decisions.jsonl)]
+  QUEUED --> LOG
+  DELETE --> LOG
 ```
-Not Eligible leads → Scout enriches & scores (Apollo + LLM)
-                ├─ Score ≥ 8 → Auto-edit → Ready → Queued  (logged to decisions.jsonl)
-                └─ Score < 8 → Manual verify or delete     (logged to decisions.jsonl)
+
+### Research Copilot flow (second mode)
+
+```mermaid
+flowchart LR
+  PAGE[Browse company or\nLinkedIn profile] --> SCRAPE[Extension content script\nextracts page text]
+  SCRAPE --> ASK[POST /api/ask-page]
+  ASK --> LLM[LLM generates\nsummary · chips · answer]
+  LLM --> UI[Side panel or dashboard]
+```
+
+### Any CRM (API bridge)
+
+For non-Aura CRMs, a script or integration layer calls Scout’s REST API and writes results back:
+
+```mermaid
+flowchart LR
+  CRM2[HubSpot · Salesforce · Pipedrive] --> SCRIPT[Your script or Zapier]
+  SCRIPT -->|"POST /leads/company-enrich"| API2[Scout API]
+  API2 --> SCRIPT
+  SCRIPT -->|"PATCH lead fields"| CRM2
+```
+
+See [examples/CONNECT-YOUR-CRM.md](./examples/CONNECT-YOUR-CRM.md).
+
+### Repository layout
+
+```text
+scout/
+├── extension/     Chrome MV3 — CRM operator UI, dock panel, LinkedIn assist
+├── server/        Node.js / TypeScript — API, lead brain, decision log, tests
+├── dashboard/     React + Vite — knowledge base & Research Copilot Q&A
+├── examples/      HubSpot script, standalone enrich CLI, CRM connect guide
+└── scripts/       Utilities (icons, etc.)
 ```
 
 ---

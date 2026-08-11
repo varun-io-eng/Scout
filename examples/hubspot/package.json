@@ -1,0 +1,13 @@
+{
+  "name": "scout-hubspot-example",
+  "version": "1.0.0",
+  "description": "Example: Connect Scout lead enrichment to HubSpot CRM",
+  "type": "module",
+  "scripts": {
+    "start": "node enrich-contacts.js",
+    "dry-run": "node enrich-contacts.js --dry-run"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0"
+  }
+}

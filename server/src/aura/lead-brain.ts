@@ -26,8 +26,10 @@ import {
   isApolloConfigured,
   type LeadWithCompanyData,
 } from './apollo-company-enrichment.js';
+import { parseFitScore, evaluateReadyDecision, DEFAULT_READY_THRESHOLD } from './lead-decisions.js';
+import { logLeadDecision } from '../decision-log.js';
 
-export const FIT_SCORE_READY_THRESHOLD = Number(process.env.LEAD_FIT_READY_THRESHOLD) || 8;
+export const FIT_SCORE_READY_THRESHOLD = Number(process.env.LEAD_FIT_READY_THRESHOLD) || DEFAULT_READY_THRESHOLD;
 
 interface LlmClient {
   client: OpenAI;
@@ -54,12 +56,6 @@ function getLlmClients(): LlmClient[] {
     });
   }
   return clients;
-}
-
-function parseFitScore(raw: unknown): number | null {
-  const n = typeof raw === 'number' ? raw : Number(raw);
-  if (!Number.isFinite(n)) return null;
-  return Math.min(10, Math.max(0, Math.round(n * 10) / 10));
 }
 
 function isRateLimitError(err: unknown): boolean {
@@ -553,7 +549,7 @@ interface LeadFitAnalysis {
   overrideFields: IcpOverrideField[];
 }
 
-function ruleBasedFitScore(
+export function ruleBasedFitScore(
   role: LinkedInRoleInfo,
   lead: CampaignLead,
   campaignIcp: Record<string, unknown> | null | undefined,
@@ -978,29 +974,55 @@ export async function processLeadWithLinkedIn(input: {
 
   if (!autoApply) return result;
 
-  // Auto-ready if LLM score passes threshold (>= 8), regardless of LinkedIn scrape
-  if (scoreClearsThreshold) {
+  const readyDecision = evaluateReadyDecision({
+    fitScore: analysis.fitScore,
+    threshold: FIT_SCORE_READY_THRESHOLD,
+    operatorVerified,
+    scrapeUsable,
+    hasLocationFix: Boolean(locationFix),
+    autoApply,
+  });
+
+  if (readyDecision.action === 'ready' && scoreClearsThreshold) {
     console.log(
       `[lead-brain] lead=${lead.id} score=${analysis.fitScore} passes threshold — auto-ready without manual confirm`,
     );
-  } else if (!scrapeUsable) {
-    // Below threshold and no LinkedIn scrape — require manual confirm
+  }
+
+  if (readyDecision.action === 'reject') {
     console.log(
       `[lead-brain] lead=${lead.id} below threshold (${analysis.fitScore} < ${FIT_SCORE_READY_THRESHOLD}) — needs LinkedIn Confirm`,
     );
     result.error = `Below threshold — scored ${analysis.fitScore}/10 from CRM. Needs LinkedIn Confirm to proceed.`;
+    logLeadDecision({
+      action: 'reject',
+      leadId: lead.id,
+      campaignId,
+      fitScore: analysis.fitScore,
+      threshold: FIT_SCORE_READY_THRESHOLD,
+      reason: readyDecision.reason,
+      source: sourceLabel,
+      operatorVerified,
+      scrapeUsable,
+    });
     return result;
   }
 
-  // Location-only path: verified + location mismatch → set listed ICP location and Ready
-  // Role path: score >= 8 → Ready (already handled above)
-  // Operator Confirm: human gate — always Ready when they confirm
-  const shouldReady =
-    operatorVerified || scoreClearsThreshold || fitsIcp || (scrapeUsable && Boolean(locationFix));
-  if (!shouldReady) {
+  if (!readyDecision.shouldReady) {
     console.log(
       `[lead-brain] lead=${lead.id} below threshold (${analysis.fitScore} < ${FIT_SCORE_READY_THRESHOLD}) and no location fix, skipping save`,
     );
+    logLeadDecision({
+      action: 'skip',
+      leadId: lead.id,
+      campaignId,
+      fitScore: analysis.fitScore,
+      threshold: FIT_SCORE_READY_THRESHOLD,
+      reason: readyDecision.reason,
+      source: sourceLabel,
+      operatorVerified,
+      scrapeUsable,
+    });
     return result;
   }
 
@@ -1074,8 +1096,26 @@ export async function processLeadWithLinkedIn(input: {
       result.applied = true;
       result.stageAfter = 'READY';
       result.fitsIcp = true;
+      logLeadDecision({
+        action: 'ready',
+        leadId: lead.id,
+        campaignId,
+        fitScore: analysis.fitScore,
+        threshold: FIT_SCORE_READY_THRESHOLD,
+        reason: readyDecision.reason,
+        source: sourceLabel,
+        stageAfter: 'READY',
+        operatorVerified,
+        scrapeUsable,
+        method: 'icp-auto',
+      });
       if (promoteToQueued) {
-        await promoteLeadToQueued(aura, campaignId, lead.id, result);
+        await promoteLeadToQueued(aura, campaignId, lead.id, result, {
+          fitScore: analysis.fitScore,
+          source: sourceLabel,
+          operatorVerified,
+          scrapeUsable,
+        });
       }
       return result;
     }
@@ -1129,7 +1169,28 @@ export async function processLeadWithLinkedIn(input: {
     }
 
     if (promoteToQueued && result.stageAfter === 'READY' && !result.error) {
-      await promoteLeadToQueued(aura, campaignId, lead.id, result);
+      await promoteLeadToQueued(aura, campaignId, lead.id, result, {
+        fitScore: analysis.fitScore,
+        source: sourceLabel,
+        operatorVerified,
+        scrapeUsable,
+      });
+    }
+
+    if (result.stageAfter === 'READY' && !result.error) {
+      logLeadDecision({
+        action: 'ready',
+        leadId: lead.id,
+        campaignId,
+        fitScore: analysis.fitScore,
+        threshold: FIT_SCORE_READY_THRESHOLD,
+        reason: readyDecision.reason,
+        source: sourceLabel,
+        stageAfter: result.stageAfter,
+        operatorVerified,
+        scrapeUsable,
+        method: 'icp-auto',
+      });
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to apply lead update';
@@ -1145,6 +1206,12 @@ async function promoteLeadToQueued(
   campaignId: number,
   leadId: number,
   result: LeadProcessResult,
+  context?: {
+    fitScore?: number;
+    source?: string;
+    operatorVerified?: boolean;
+    scrapeUsable?: boolean;
+  },
 ): Promise<void> {
   try {
     await updateCampaignLead(aura, leadId, {
@@ -1157,6 +1224,19 @@ async function promoteLeadToQueued(
       result.stageAfter = 'QUEUED';
       result.summary += ' → Queued';
       console.log(`[lead-brain] lead=${leadId} promoted READY → QUEUED`);
+      logLeadDecision({
+        action: 'queued',
+        leadId,
+        campaignId,
+        fitScore: context?.fitScore,
+        threshold: FIT_SCORE_READY_THRESHOLD,
+        reason: 'promoted READY → QUEUED after ICP pass',
+        source: context?.source,
+        stageAfter: 'QUEUED',
+        operatorVerified: context?.operatorVerified,
+        scrapeUsable: context?.scrapeUsable,
+        method: 'icp-auto',
+      });
     } else {
       result.summary += ` — Ready but Queued failed (stage=${stage || '?'})`;
       console.warn(`[lead-brain] lead=${leadId} Queued promote failed, stage=${stage}`);

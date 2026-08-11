@@ -1,0 +1,1 @@
+{"action":"ready","leadId":1563,"campaignId":2,"fitScore":9,"threshold":8,"reason":"fitScore 9 >= threshold 8 — auto-ready","source":"operator-verified","stageAfter":"READY","operatorVerified":true,"scrapeUsable":true,"method":"icp-auto","ts":"2026-08-11T10:34:55.170Z"}

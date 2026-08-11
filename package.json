@@ -12,7 +12,8 @@
     "dev:server": "npm run dev -w server",
     "dev:dashboard": "npm run dev -w dashboard",
     "build": "npm run build -w server && npm run build -w dashboard",
-    "start": "npm run start -w server"
+    "start": "npm run start -w server",
+    "test": "npm run test -w server"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

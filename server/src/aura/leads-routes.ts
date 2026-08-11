@@ -23,6 +23,7 @@ import {
   isApolloConfigured,
   type LeadWithCompanyData,
 } from './apollo-company-enrichment.js';
+import { logLeadDecision } from '../decision-log.js';
 
 async function hydrateLeadFromApi(
   aura: AuraConfig,
@@ -386,6 +387,16 @@ export function createLeadRoutes(): Router {
         `[leads/delete] campaign=${body.campaignId} deleted=${result.deleted ?? body.leadIds.length}`,
       );
 
+      for (const leadId of body.leadIds) {
+        logLeadDecision({
+          action: 'delete',
+          leadId,
+          campaignId: body.campaignId,
+          reason: 'permanently removed from campaign via /leads/delete',
+          source: 'operator',
+        });
+      }
+
       res.json({
         ok: true,
         campaignId: body.campaignId,
@@ -692,6 +703,15 @@ export function createLeadRoutes(): Router {
             signal: AbortSignal.timeout(15_000),
           });
         }
+        logLeadDecision({
+          action: 'ready',
+          leadId: lead.id,
+          campaignId,
+          reason: 'all company fields present in CRM — enrich-and-ready',
+          source: 'enrich-and-ready',
+          stageAfter: 'READY',
+          method: 'crm_complete',
+        });
         return res.json({
           leadId: lead.id,
           leadName,
@@ -800,6 +820,17 @@ export function createLeadRoutes(): Router {
       // ── 5. Return result ───────────────────────────────────────────────────
       if (allFieldsFilled) {
         console.log(`[enrich-and-ready] lead=${lead.id} Enrichment successful, lead is READY`);
+        logLeadDecision({
+          action: 'ready',
+          leadId: lead.id,
+          campaignId,
+          reason: apolloUsed
+            ? 'company enrichment complete via Apollo — enrich-and-ready'
+            : 'all company fields present — enrich-and-ready',
+          source: 'enrich-and-ready',
+          stageAfter: 'READY',
+          method: apolloUsed ? 'apollo_company_enrichment' : 'crm_complete',
+        });
         return res.json({
           leadId: lead.id,
           leadName,

@@ -8,7 +8,7 @@
  * Free tier gives $5/month (~100–200 profiles at ~$0.03 each).
  *
  * Configured actor (APIFY_ACTOR env):
- *   Default: "bebity~linkedin-profile-scraper"  — no LinkedIn cookie needed
+ *   Default: "johnvc~linkedin-profile-api"  — no LinkedIn cookie needed
  *   Alt:     "curious_coder~linkedin-profile-scraper"  — needs LINKEDIN_LI_AT cookie
  */
 
@@ -91,19 +91,19 @@ function normalizeApifyItem(item: unknown): LinkedInProfileScrape | null {
 
   const currentTitle =
     String(
-      d.currentJobTitle ?? d.current_title ?? currentPos?.title ?? currentPos?.jobTitle ?? '',
+      d.currentJobTitle ?? d.current_title ?? d.currentTitle ?? currentPos?.title ?? currentPos?.jobTitle ?? '',
     ).trim();
 
   const currentCompany =
     String(
-      d.currentCompanyName ?? d.current_company ?? currentPos?.companyName ?? currentPos?.company ?? '',
+      d.currentCompanyName ?? d.current_company ?? d.currentCompany ?? currentPos?.companyName ?? currentPos?.company ?? '',
     ).trim();
 
   // Build experience text blob for compatibility with existing logic
   const experienceText = expArr
     .slice(0, 5)
     .map((p) =>
-      [p.title, p.companyName ?? p.company, p.location, p.startDate, p.endDate ?? 'Present']
+      [p.title, p.companyName ?? p.company, p.location, p.startDate ?? p.start_date, p.endDate ?? p.end_date ?? 'Present']
         .filter(Boolean)
         .join(' · '),
     )
@@ -115,7 +115,7 @@ function normalizeApifyItem(item: unknown): LinkedInProfileScrape | null {
   if (!personName) return null;
 
   return {
-    url: String(d.profileUrl ?? d.url ?? d.linkedinUrl ?? '').trim(),
+    url: String(d.profileUrl ?? d.url ?? d.linkedinUrl ?? d.publicUrl ?? '').trim(),
     personName,
     headline,
     about,
@@ -130,7 +130,7 @@ function normalizeApifyItem(item: unknown): LinkedInProfileScrape | null {
 /** Scrape a LinkedIn profile via Apify. */
 export async function scrapeLinkedInWithApify(profileUrl: string): Promise<LinkedInProfileScrape> {
   const token = process.env.APIFY_API_TOKEN ?? '';
-  const actorId = process.env.APIFY_ACTOR ?? 'bebity~linkedin-profile-scraper';
+  const actorId = process.env.APIFY_ACTOR ?? 'johnvc~linkedin-profile-api';
 
   if (!token || token.startsWith('apify_api_your')) {
     return makeError(profileUrl, 'APIFY_API_TOKEN not set. Sign up free at apify.com and add the token to server/.env.');
@@ -150,7 +150,7 @@ export async function scrapeLinkedInWithApify(profileUrl: string): Promise<Linke
   const input: Record<string, unknown> = {
     // curious_coder format
     urls: [{ url }],
-    // bebity / other actors format
+    // johnvc~linkedin-profile-api / other actors format
     profileUrls: [url],
     startUrls: [{ url }],
     proxyConfiguration: { useApifyProxy: true },

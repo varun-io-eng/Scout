@@ -496,14 +496,14 @@ export async function fetchLinkedInProfileFromApify(profileUrl: string): Promise
     console.log('[apify] Fetching profile directly:', profileUrl);
     
     // Use Apify's LinkedIn Profile Scraper actor
-    const response = await fetch('https://api.apify.com/v2/acts/bebity~linkedin-profile-scraper/run-sync-get-dataset-items', {
+    const response = await fetch('https://api.apify.com/v2/acts/johnvc~linkedin-profile-api/run-sync-get-dataset-items', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${APIFY_API_TOKEN}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: profileUrl,
+        profileUrls: [profileUrl],
       }),
     });
 
@@ -526,33 +526,37 @@ export async function fetchLinkedInProfileFromApify(profileUrl: string): Promise
     }
 
     const profile = data[0]; // Apify returns array, take first item
+    if (profile.error_message) {
+      console.error('[apify] Profile not returned:', profile.error_message);
+      return null;
+    }
     console.log('[apify] Successfully fetched profile data');
 
     // Convert Apify response to our LinkedInProfileData format
     const profileData: LinkedInProfileData = {
       personName: profile.fullName || profile.firstName + ' ' + profile.lastName || '',
       headline: profile.headline || '',
-      jsonTitle: profile.jobTitle || '',
-      jsonCompany: profile.companyName || '',
+      jsonTitle: profile.jobTitle || profile.currentTitle || '',
+      jsonCompany: profile.companyName || profile.currentCompany || '',
       location: profile.location || '',
       profileUrl: profileUrl,
-      currentCompany: profile.companyName || '',
-      currentTitle: profile.jobTitle || '',
+      currentCompany: profile.companyName || profile.currentCompany || '',
+      currentTitle: profile.jobTitle || profile.currentTitle || '',
       email: profile.email || '',
       phone: profile.phone || '',
-      workHistory: profile.experiences?.map((exp: any) => ({
+      workHistory: (profile.experiences || profile.positions || profile.experience)?.map((exp: any) => ({
         title: exp.title || '',
-        company: exp.companyName || '',
+        company: exp.companyName || exp.company || '',
         duration: exp.duration || '',
       })) || [],
       education: profile.education?.map((edu: any) => ({
-        school: edu.schoolName || '',
+        school: edu.schoolName || edu.title || '',
         degree: edu.degreeName || '',
         field: edu.fieldOfStudy || '',
       })) || [],
       skills: profile.skills || [],
       about: profile.about || profile.summary || '',
-      connections: profile.connectionsCount || '',
+      connections: profile.connectionsCount || profile.connectionsText || '',
     };
 
     return profileData;
